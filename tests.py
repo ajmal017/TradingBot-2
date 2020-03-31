@@ -1,5 +1,5 @@
 import numpy as np 
-from trader import *
+# from trader import *
 from Q_models import *
 import torch
 import statistics as st
@@ -15,9 +15,7 @@ import statistics as st
 
 # print(sum(p.numel() for p in qnet.parameters() if p.requires_grad))
 
-data = np.load("data/03_30.npy")
-data[:,0] -= data[0,0]
-times = data[:,0]
+
 # data = data[times < 5000, :]
 # plt.plot(data[:,0], data[:,1])
 # plt.show()
@@ -55,64 +53,163 @@ def bollinger(time, price, ma_type, num_minutes=20, num_sigma=2):
 	
 	return top, bottom
 
-top, bottom = bollinger(data[:,0], data[:,1], "sma", 20, 2)
-# top_, bottom_ = bollinger(data[:,0], data[:,1], "ema", 100, 2)
+
+class Buyer:
+	def __init__(self, ma_type="sma", num_minutes=20, num_sigma=2):
+		self.ma_type = ma_type
+		self.num_minutes = num_minutes
+		self.num_sigma = num_sigma
+
+	def buy(self, data):
+		""" Algo to get in a trade """
+
+		time, price = data[:,0], data[:,1]
+
+		considered = np.where(time >= time[-1] - 60*self.num_minutes)
+
+		if time[considered][-1] - time[considered][0] < 59*self.num_minutes:
+			return False
+
+		else:
+			if self.ma_type is "sma":
+				ma = st.mean(price[considered])
+			elif self.ma_type is "ema":
+				ma = ema(price[considered])
+
+			std = st.stdev(price[considered])
+			bottom_bollinger = ma - self.num_sigma*std
+
+			if price[-1] < bottom_bollinger:
+				return True
+			else:
+				return  False
+
+
+class Seller:
+	def __init__(self, max_loss=1, max_win=5, brackets=.5, hyst=.1):
+		self.max_loss = max_loss
+		self.max_win = max_win
+		self.brackets = brackets
+		self.hyst = hyst
+
+	def set_brackets(self, buy_price):
+		# calculating price brackets
+		self.bottom = buy_price - buy_price*self.max_loss/100
+		self.top = buy_price + buy_price*self.max_win/100
+		hysteresis = self.hyst/100*buy_price
+
+		levels = np.arange(self.brackets, self.max_win, self.brackets)
+		levels_bottom = buy_price + buy_price*levels/100
+		levels_bottom = np.append(self.bottom, levels_bottom)
+
+		levels_top = levels_bottom[1:] + hysteresis
+		levels_top = np.append(levels_top, self.top)
+
+		self.levels = np.vstack((levels_bottom, levels_top))
+		self.buy_price = buy_price
+		self.current_bracket = 0
+
+	def sell(self, data):
+		""" Algo to get out of a trade """
+
+		price = data[-1,1]
+		bracket = self.levels[:,self.current_bracket]
+
+		if price >= self.top:
+			return True # max profit reached
+
+		elif price <= bracket[0]:
+			return True # below lower bracket
+
+		elif price >= bracket[1]: # above top bracket
+			self.current_bracket += 1
+			return False
+		else: # still between brackets
+			return False
+
+
+def test_trade(date, buyer, seller):
+	data = np.load("data/"+date+".npy")
+	data[:,0] -= data[0,0]
+
+	trade_prices = np.zeros((1,2))
+	trade_times = np.zeros((1,2))
+	trading = False
+
+	for i in range(1, data[:,0].shape[0]):
+		current_data = data[:i, :2]
+
+		if not trading:
+			if buyer.buy(current_data):
+				trading = True
+				buy_time = current_data[-1,0]
+				buy_price = current_data[-1,1]
+				seller.set_brackets(buy_price)
+
+		elif trading:
+			if seller.sell(current_data) or i == data[:,0].shape[0]-1:
+				trading = False
+				trade_prices = np.vstack((trade_prices, np.array([buy_price, current_data[-1,1]])))
+				trade_times = np.vstack((trade_times, np.array([buy_time, current_data[-1,0]])))
+
+		print(np.round(i/data[:,0].shape[0]*100, 2))
+
+	return (trade_times[1:,:], trade_prices[1:,:])
+
+
+def assess_performance(trades, plot=False, data=None):
+	times, prices = trades
+	profit = np.sum((prices[:,-1] - prices[:,0])/prices[:,0]*100)
+
+	if plot:
+		plt.plot(data[:,0]/60, data[:,1], "k-", label="Stock")
+		plt.plot(times[:,0]/60, prices[:,0], "go", label="Buy")
+		plt.plot(times[:,1]/60, prices[:,1], "ro", label="Sell")
+		plt.legend()
+		plt.show()
+
+	return profit
+
+
+
+date = "03_30"
+buyer = Buyer(ma_type="sma", num_minutes=10, num_sigma=2)
+seller = Seller(max_loss=.5, max_win=5, brackets=.5, hyst=.2)
+
+trades = test_trade(date, buyer, seller)
+data = np.load("data/03_30.npy")
+data[:,0] -= data[0,0]
+profit = assess_performance(trades, True, data)
+
+print(np.round(profit, 2))
+
+
+
+top, bottom = bollinger(data[:,0], data[:,1], "sma", 10, 2)
+# # top_, bottom_ = bollinger(data[:,0], data[:,1], "ema", 100, 2)
 
 plt.plot(data[:,0]/60, data[:,1], "r")
 plt.plot(data[:,0]/60, top, "k")
 plt.plot(data[:,0]/60, bottom, "k")
-# plt.plot(data[:,0], top_, "b")
-# plt.plot(data[:,0], bottom_, "b")
-plt.twinx()
-plt.plot(data[1:,0]/60, data[1:,3]-data[:-1,3])
+# # plt.plot(data[:,0], top_, "b")
+# # plt.plot(data[:,0], bottom_, "b")
+# plt.twinx()
+# plt.plot(data[1:,0]/60, data[1:,3]-data[:-1,3])
 plt.show()
 
+# buying = []
+# for i in range(data[:,0].shape[0]):
+# 	if buy(data[:i+1, 0:2]):
+# 		buying.append(1)
+# 	else:
+# 		buying.append(0)
+# plt.plot(data[:,0]/60, buying)
+# plt.twinx()
+# plt.plot(data[:,0]/60, data[:,1])
+# plt.show()
+# def train(data, buyer, seller):
 
 
-
-
-def make_profit(buy_price, max_loss=1, max_win=5, brackets=.5, hyst=.1):
-	""" Algo to protect profits """
-
-	# calculating prices
-	bottom = buy_price - buy_price*max_loss/100
-	top = buy_price + buy_price*max_win/100
-	hysteresis = hyst/100*buy_price
-
-	levels = np.arange(brackets, max_win, brackets)
-	levels_bottom = buy_price + buy_price*levels/100
-	levels_bottom = np.append(bottom, levels_bottom)
-
-	levels_top = levels_bottom[1:] + hysteresis
-	levels_top = np.append(levels_top, top)
-
-	levels = np.vstack((levels_bottom, levels_top))
-
-	trading = True
-	# initial bracket
-	i = 0
-	j = 0 # for simulation only
-	while trading:
-		bracket = levels[:,i]
-		price = prices[j] # fetch_price()
-
-		if price >= top:
-			action = "sell -- profit: " + str((price-buy_price)/buy_price*100) + " %" # sell()
-			trading = False
-
-		elif price <= bracket[0]:
-			action = "sell -- profit: " + str((price-buy_price)/buy_price*100) + " %" # sell()
-			trading = False
-
-		elif price >= bracket[1]:
-			i += 1
-			action = "level-up"
-		else:
-			action = "hold"
-		
-		print(np.round(buy_price,2), np.round(price,2), np.round(bracket[0],2), np.round(bracket[1],2), action)
-
-		j += 1
 
 # prices = [200, 200, 199, 200.5, 201, 203, 204, 205, 206, 206.5, 206.3, 206.2, 206.1, 206, 205.9, 205.1]
 # make_profit(200)

@@ -1,5 +1,5 @@
 from yahoo_fin import stock_info as si
-import numpy as np
+# import numpy as np
 # import pandas as pd
 from time import sleep, time
 import matplotlib.pyplot as plt
@@ -98,15 +98,7 @@ class Trader:
         self.update()
         inputs = [
                 time(),
-                self.price,
-                self.open_price,
-                self.volume,
-                self.avg_volume,
-                self.bid[0], 
-                self.bid[-1],
-                self.ask[0],
-                self.ask[-1],
-                self.shares 
+                self.price 
                 ]
         return np.array(inputs)
 
