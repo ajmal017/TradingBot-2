@@ -1,14 +1,29 @@
 from utils import *
 
 
-buyer = Buyer(ma_type="sma", num_minutes=10, num_sigma=2)
-seller = Seller(max_loss=.5, max_win=5, brackets=.5, hyst=.2)
-trader = Trader(buyer, seller)
-date = "03_30"
-
-profit = trader.test_trade(date)
-trader.two_percent()
-# print(profit)
-# trader.plot_trades()
+trader = mvp_trader()
+date = str(datetime.datetime.now().month)+"_"+str(datetime.datetime.now().day)
 
 
+# Daily performance
+if market_is_open():
+	trader.live_trade(date)
+else:
+	if 0:
+		profit = trader.test_trade(date)
+		trader.plot_trades()
+		trader.reach_goal()
+		print(profit)
+
+# Study model on all datasets		
+if 0:
+
+	trader.goal = 3
+	trader.buyer.num_minutes = 10
+	trader.standby_time = 5
+
+	profits, mean, std = trader.test_trader(True)
+	# print("average of "+str(mean)+" +- "+str(std))
+	profits = np.asarray(profits)
+	profits[profits >= trader.goal] = trader.goal
+	print(np.mean(profits))

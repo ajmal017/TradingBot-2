@@ -1,6 +1,6 @@
 from yahoo_fin import stock_info as si
-# import numpy as np
-# import pandas as pd
+import numpy as np
+import pandas as pd
 from time import sleep, time
 import matplotlib.pyplot as plt
 
@@ -96,12 +96,8 @@ class Trader:
 
     def get_params(self):
         self.update()
-        inputs = [
-                time(),
-                self.price 
-                ]
+        inputs = [time(), self.price]
         return np.array(inputs)
-
 
 
 def make_dataset(N, file_name, sleep_time):
@@ -135,4 +131,4 @@ def plot_dataset(date):
     plt.show()
 
 
-# make_dataset(8000, "03_30", 2)
+make_dataset(12000, "data/04_02", 2)
